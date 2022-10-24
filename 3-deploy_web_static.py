@@ -1,57 +1,73 @@
 #!/usr/bin/python3
-"""
-Fabric script methods:
-    do_pack: packs web_static/ files into .tgz archive
-    do_deploy: deploys archive to webservers
-    deploy: do_packs && do_deploys
-Usage:
-    fab -f 3-deploy_web_static.py deploy -i my_ssh_private_key -u ubuntu
-"""
-from fabric.api import local, env, put, run
-from time import strftime
-import os.path
-env.hosts = ['35.229.54.225', '35.231.225.251']
+"""Tar, transfer, and deploy static html to webservers"""
 
+from fabric import api, decorators
+from fabric.contrib import files
+from datetime import datetime
+import os
 
-def do_pack():
-    """generate .tgz archive of web_static/ folder"""
-    timenow = strftime("%Y%M%d%H%M%S")
-    try:
-        local("mkdir -p versions")
-        filename = "versions/web_static_{}.tgz".format(timenow)
-        local("tar -cvzf {} web_static/".format(filename))
-        return filename
-    except:
-        return None
-
-
-def do_deploy(archive_path):
-    """
-    Deploy archive to web server
-    """
-    if os.path.isfile(archive_path) is False:
-        return False
-    try:
-        filename = archive_path.split("/")[-1]
-        no_ext = filename.split(".")[0]
-        path_no_ext = "/data/web_static/releases/{}/".format(no_ext)
-        symlink = "/data/web_static/current"
-        put(archive_path, "/tmp/")
-        run("mkdir -p {}".format(path_no_ext))
-        run("tar -xzf /tmp/{} -C {}".format(filename, path_no_ext))
-        run("rm /tmp/{}".format(filename))
-        run("mv {}web_static/* {}".format(path_no_ext, path_no_ext))
-        run("rm -rf {}web_static".format(path_no_ext))
-        run("rm -rf {}".format(symlink))
-        run("ln -s {} {}".format(path_no_ext, symlink))
-        return True
-    except:
-        return False
+api.env.hosts = ['holberton1', 'holberton3']
+api.env.hosts = ['142.44.167.235', '144.217.246.199']
+api.env.user = 'ubuntu'
+api.env.key_filename = '~/.ssh/holberton'
 
 
 def deploy():
-    archive_path = do_pack()
-    if archive_path is None:
+    """Wrapper function to pack html files into tarball and transfer
+    to web servers."""
+    return do_deploy(do_pack())
+
+
+@decorators.runs_once
+def do_pack():
+    """Function to create tarball of webstatic files from the web_static
+    folder in Airbnb_v2.
+
+    Returns: path of .tgz file on success, False otherwise
+    """
+    with api.settings(warn_only=True):
+        isdir = os.path.isdir('versions')
+        if not isdir:
+            mkdir = api.local('mkdir versions')
+            if mkdir.failed:
+                return False
+        suffix = datetime.now().strftime('%Y%m%d%M%S')
+        path = 'versions/web_static_{}.tgz'.format(suffix)
+        tar = api.local('tar -cvzf {} web_static'.format(path))
+        if tar.failed:
+            return False
+        size = os.stat(path).st_size
+        print('web_static packed: {} -> {}Bytes'.format(path, size))
+        return path
+
+
+def do_deploy(archive_path):
+    """Function to transfer `archive_path` to web servers.
+
+    Args:
+        archive_path (str): path of the .tgz file to transfer
+
+    Returns: True on success, False otherwise.
+    """
+    if not os.path.isfile(archive_path):
         return False
-    success = do_deploy(archive_path)
-    return success
+    with api.cd('/tmp'):
+        basename = os.path.basename(archive_path)
+        root, ext = os.path.splitext(basename)
+        outpath = '/data/web_static/releases/{}'.format(root)
+        try:
+            putpath = api.put(archive_path)
+            if files.exists(outpath):
+                api.run('rm -rdf {}'.format(outpath))
+            api.run('mkdir -p {}'.format(outpath))
+            api.run('tar -xzf {} -C {}'.format(putpath[0], outpath))
+            api.run('rm -f {}'.format(putpath[0]))
+            api.run('mv -u {}/web_static/* {}'.format(outpath, outpath))
+            api.run('rm -rf {}/web_static'.format(outpath))
+            api.run('rm -rf /data/web_static/current')
+            api.run('ln -s {} /data/web_static/current'.format(outpath))
+            print('New version deployed!')
+        except:
+            return False
+        else:
+            return True

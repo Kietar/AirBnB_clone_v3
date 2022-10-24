@@ -1,36 +1,43 @@
 #!/usr/bin/python3
-"""
-Fabric script method:
-    do_deploy: deploys archive to webservers
-Usage:
-    fab -f 2-do_deploy_web_static.py
-    do_deploy:archive_path=versions/web_static_20170315003959.tgz
-    -i my_ssh_private_key -u ubuntu
-"""
-from fabric.api import env, put, run
-import os.path
-env.hosts = ['35.229.54.225', '35.231.225.251']
+"""Deploy an archive of static html to my web servers with Fabric3"""
+
+from fabric import api
+from fabric.contrib import files
+import os
+
+
+api.env.hosts = ['142.44.167.235', '144.217.246.199']
+api.env.user = 'ubuntu'
+api.env.key_filename = '~/.ssh/holberton'
 
 
 def do_deploy(archive_path):
+    """Function to transfer `archive_path` to web servers.
+
+    Args:
+        archive_path (str): path of the .tgz file to transfer
+
+    Returns: True on success, False otherwise.
     """
-    Deploy archive to web server
-    """
-    if os.path.isfile(archive_path) is False:
+    if not os.path.isfile(archive_path):
         return False
-    try:
-        filename = archive_path.split("/")[-1]
-        no_ext = filename.split(".")[0]
-        path_no_ext = "/data/web_static/releases/{}/".format(no_ext)
-        symlink = "/data/web_static/current"
-        put(archive_path, "/tmp/")
-        run("mkdir -p {}".format(path_no_ext))
-        run("tar -xzf /tmp/{} -C {}".format(filename, path_no_ext))
-        run("rm /tmp/{}".format(filename))
-        run("mv {}web_static/* {}".format(path_no_ext, path_no_ext))
-        run("rm -rf {}web_static".format(path_no_ext))
-        run("rm -rf {}".format(symlink))
-        run("ln -s {} {}".format(path_no_ext, symlink))
-        return True
-    except:
-        return False
+    with api.cd('/tmp'):
+        basename = os.path.basename(archive_path)
+        root, ext = os.path.splitext(basename)
+        outpath = '/data/web_static/releases/{}'.format(root)
+        try:
+            putpath = api.put(archive_path)
+            if files.exists(outpath):
+                api.run('rm -rdf {}'.format(outpath))
+            api.run('mkdir -p {}'.format(outpath))
+            api.run('tar -xzf {} -C {}'.format(putpath[0], outpath))
+            api.run('rm -f {}'.format(putpath[0]))
+            api.run('mv -u {}/web_static/* {}'.format(outpath, outpath))
+            api.run('rm -rf {}/web_static'.format(outpath))
+            api.run('rm -rf /data/web_static/current')
+            api.run('ln -sf {} /data/web_static/current'.format(outpath))
+            print('New version deployed!')
+        except:
+            return False
+        else:
+            return True

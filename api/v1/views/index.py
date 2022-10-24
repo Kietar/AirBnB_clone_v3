@@ -1,29 +1,33 @@
 #!/usr/bin/python3
-""" returns json statuses for app_views routes  """
+"""index.py to connect to API"""
 from api.v1.views import app_views
-from flask import jsonify
+from flask import Flask, Blueprint, jsonify
 from models import storage
 
 
+hbnbText = {
+    "amenities": "Amenity",
+    "cities": "City",
+    "places": "Place",
+    "reviews": "Review",
+    "states": "State",
+    "users": "User"
+}
+
+
 @app_views.route('/status', strict_slashes=False)
-def stat_return():
-    """ return json status: OK """
+def hbnbStatus():
+    """hbnbStatus"""
     return jsonify({"status": "OK"})
 
 
-@app_views.route('/stats', methods=['GET'], strict_slashes=False)
-def stat_count():
-    """ endpoint that retrieves the # of each objects by type """
-    count_stats = {
-        'amenities': storage.count('Amenity'),
-        'cities': storage.count('City'),
-        'places': storage.count('Place'),
-        'reviews': storage.count('Review'),
-        'states': storage.count('State'),
-        'users': storage.count('User')
-    }
-    return jsonify(count_stats)
-
+@app_views.route('/stats', strict_slashes=False)
+def hbnbStats():
+    """hbnbStats"""
+    return_dict = {}
+    for key, value in hbnbText.items():
+        return_dict[key] = storage.count(value)
+    return jsonify(return_dict)
 
 if __name__ == "__main__":
     pass

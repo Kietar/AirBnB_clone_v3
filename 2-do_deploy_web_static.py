@@ -1,28 +1,36 @@
 #!/usr/bin/python3
-"""web server distribution"""
-from fabric.api import put, run, env, sudo
+"""
+Fabric script method:
+    do_deploy: deploys archive to webservers
+Usage:
+    fab -f 2-do_deploy_web_static.py
+    do_deploy:archive_path=versions/web_static_20170315003959.tgz
+    -i my_ssh_private_key -u ubuntu
+"""
+from fabric.api import env, put, run
 import os.path
-import paramiko
-
-env.hosts = ['44.210.103.220', '35.168.59.18']
+env.hosts = ['35.229.54.225', '35.231.225.251']
 
 
 def do_deploy(archive_path):
-    """distributes an archive to your web servers
     """
-    if os.path.exists(archive_path) is False:
+    Deploy archive to web server
+    """
+    if os.path.isfile(archive_path) is False:
         return False
     try:
-        arc = archive_path.split("/")
-        base = arc[1].strip('.tgz')
-        put(archive_path, '/tmp/')
-        sudo('mkdir -p /data/web_static/releases/{}'.format(base))
-        main = "/data/web_static/releases/{}".format(base)
-        sudo('tar -xzf /tmp/{} -C {}/'.format(arc[1], main))
-        sudo('rm /tmp/{}'.format(arc[1]))
-        sudo('mv {}/web_static/* {}/'.format(main, main))
-        sudo('rm -rf /data/web_static/current')
-        sudo('ln -s {}/ "/data/web_static/current"'.format(main))
+        filename = archive_path.split("/")[-1]
+        no_ext = filename.split(".")[0]
+        path_no_ext = "/data/web_static/releases/{}/".format(no_ext)
+        symlink = "/data/web_static/current"
+        put(archive_path, "/tmp/")
+        run("mkdir -p {}".format(path_no_ext))
+        run("tar -xzf /tmp/{} -C {}".format(filename, path_no_ext))
+        run("rm /tmp/{}".format(filename))
+        run("mv {}web_static/* {}".format(path_no_ext, path_no_ext))
+        run("rm -rf {}web_static".format(path_no_ext))
+        run("rm -rf {}".format(symlink))
+        run("ln -s {} {}".format(path_no_ext, symlink))
         return True
     except:
         return False
